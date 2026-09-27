@@ -1,0 +1,36 @@
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.key
+*.pem
+
+# Python environments and generated files
+.venv/
+**/.venv/
+venv/
+**/venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+**/.pytest_cache/
+.coverage
+htmlcov/
+
+# Editors and operating systems
+.idea/
+**/.idea/
+.vscode/
+**/.vscode/
+.DS_Store
+Thumbs.db
+
+# Runtime files
+*.log
+*.sqlite
+*.sqlite3
+

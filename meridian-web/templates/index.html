@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meridian Review Console</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div>
+      <p class="eyebrow">Meridian Retail · Human review workspace</p>
+      <h1>Support case review</h1>
+      <p class="subtitle">Grounded in the supplied context pack. Nothing is sent to a customer.</p>
+    </div>
+    <div class="status-pill"><span></span> Context loaded</div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Task</h2>
+          <span class="count">task.md</span>
+        </div>
+        <pre class="task-copy">{{ task }}</pre>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <h2>Context sources</h2>
+          <span class="count">{{ source_names|length }}</span>
+        </div>
+        <ul class="source-list">
+          {% for source in source_names %}
+            <li><span class="file-mark"></span>{{ source }}</li>
+          {% else %}
+            <li>No context files found.</li>
+          {% endfor %}
+        </ul>
+      </section>
+    </aside>
+
+    <section class="workspace">
+      {% if error %}
+        <div class="alert" role="alert">
+          <strong>Review unavailable</strong>
+          <p>{{ error }}</p>
+        </div>
+      {% endif %}
+
+      <section class="run-card">
+        <div>
+          <p class="eyebrow">Contract-validated output</p>
+          <h2>Prepare the C2 review</h2>
+          <p>The server checks source IDs, known facts, missing information, policy references, and review status.</p>
+        </div>
+        <form id="review-form" action="{{ url_for('run_review') }}" method="post">
+          <label class="case-select-label" for="case_id">Select case</label>
+          <div class="run-controls">
+            <select id="case_id" name="case_id">
+              {% for option in case_options %}
+                <option value="{{ option.case_id }}" {% if option.case_id == selected_case_id %}selected{% endif %}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+            <button id="run-button" type="submit">Run structured review <span>→</span></button>
+          </div>
+        </form>
+      </section>
+
+      <section id="loading-panel" class="loading-panel" hidden aria-live="polite">
+        <div class="loading-copy">
+          <p class="eyebrow">Review in progress</p>
+          <h2>Reading evidence and applying policy</h2>
+          <p>Local safety gates run first. If the case can proceed, this remains visible until the model returns a contract-validated response.</p>
+        </div>
+        <div class="scroll-window" aria-hidden="true">
+          <div class="scrolling-evidence">
+            {% for pass in range(2) %}
+              <div class="scroll-item"><span>P1</span><i></i><i></i></div>
+              <div class="scroll-item"><span>CASE</span><i></i><i></i></div>
+              <div class="scroll-item"><span>P4</span><i></i><i></i></div>
+              <div class="scroll-item"><span>ORDER</span><i></i><i></i></div>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+
+      {% if result %}
+        <section class="result-header">
+          <div>
+            <p class="eyebrow">Case {{ result.case_id }}</p>
+            <h2>{{ result.case_summary }}</h2>
+          </div>
+          <span class="review-status">{{ result.review_status|replace('_', ' ') }}</span>
+        </section>
+
+        <div class="result-grid">
+          <section class="panel highlight-card">
+            <p class="label">Proposed reply</p>
+            <p class="draft">{{ result.draft_reply }}</p>
+            <p class="fine-print">Draft for human review only. No customer action has occurred.</p>
+          </section>
+
+          <section class="panel action-card">
+            <p class="label">Human action required</p>
+            <p>{{ result.human_action_required }}</p>
+            {% if result.missing_information %}
+              <div class="chips">
+                {% for item in result.missing_information %}
+                  <span>{{ item }}</span>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </section>
+        </div>
+
+        <section class="panel full-width">
+          <div class="panel-heading">
+            <h2>Known facts</h2>
+            <span class="count">{{ result.known_facts|length }}</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Field</th><th>Value</th><th>Source</th></tr></thead>
+              <tbody>
+                {% for fact in result.known_facts %}
+                  <tr>
+                    <td>{{ fact.field }}</td>
+                    <td>{{ fact.value if fact.value is not none else 'Missing' }}</td>
+                    <td><code>{{ fact.source_id }}</code></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel full-width">
+          <div class="panel-heading">
+            <h2>Evidence links</h2>
+            <div class="chips compact">
+              {% for ref in result.evidence_refs %}<span>{{ ref }}</span>{% endfor %}
+            </div>
+          </div>
+          <ul class="evidence-list">
+            {% for link in result.evidence_links %}
+              <li><p>{{ link.claim }}</p><code>{{ link.source_id }}</code></li>
+            {% endfor %}
+          </ul>
+        </section>
+
+        {% if result.conflicting_information %}
+          <section class="panel full-width conflict-card">
+            <h2>Conflicting information</h2>
+            {% for conflict in result.conflicting_information %}
+              <p>{{ conflict.description }}</p>
+            {% endfor %}
+          </section>
+        {% endif %}
+
+        <details class="raw-result">
+          <summary>View validated JSON</summary>
+          <pre>{{ result|tojson(indent=2) }}</pre>
+        </details>
+      {% else %}
+        <section class="empty-state">
+          <div class="empty-icon">✓</div>
+          <h2>Ready for a grounded review</h2>
+          <p>Run the task to produce a structured result linked to the permitted evidence map.</p>
+        </section>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

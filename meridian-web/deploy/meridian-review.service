@@ -1,0 +1,31 @@
+[Unit]
+Description=Meridian Review Web Application
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=meridian
+Group=meridian
+WorkingDirectory=/opt/meridian-review/web
+Environment=MERIDIAN_CORE_DIR=/opt/meridian-review/core
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/meridian-review/venv/bin/waitress-serve --host=127.0.0.1 --port=8081 web_app:app
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

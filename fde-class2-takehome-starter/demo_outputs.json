@@ -1,0 +1,20 @@
+{
+  "C1": {
+    "draft_reply": "The damaged jacket can be referred for human return review because the damage was reported within two days of delivery. This is not a refund approval, and the issue remains open for review.",
+    "evidence_refs": ["P1", "P3", "P4"],
+    "missing_information": [],
+    "review_status": "READY_FOR_HUMAN_REVIEW"
+  },
+  "C2": {
+    "draft_reply": "Please provide the delivery date before Meridian Retail assesses whether the two-day reporting rule applies. A human support agent will review the request.",
+    "evidence_refs": ["P2", "P4"],
+    "missing_information": ["delivery_date"],
+    "review_status": "NEEDS_INFORMATION"
+  },
+  "C3": {
+    "draft_reply": "The issue record is still open, so I cannot confirm that the issue is resolved. A human support agent will review the request.",
+    "evidence_refs": ["P3", "P4"],
+    "missing_information": [],
+    "review_status": "READY_FOR_HUMAN_REVIEW"
+  }
+}

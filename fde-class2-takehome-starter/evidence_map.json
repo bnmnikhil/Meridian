@@ -1,0 +1,63 @@
+{
+  "support_queue:C2": {
+    "source_file": "cases.json",
+    "record_path": "C2",
+    "fields": [
+      "case_id",
+      "product",
+      "customer_question"
+    ],
+    "data": {
+      "case_id": "C2",
+      "product": "Jacket",
+      "customer_question": "The jacket has a broken zip. Can I return it?"
+    }
+  },
+  "order_record:MR-1088": {
+    "source_file": "cases.json",
+    "record_path": "C2",
+    "fields": [
+      "order_id",
+      "product",
+      "delivery_date"
+    ],
+    "data": {
+      "case_id": "C2",
+      "order_id": "MR-1088",
+      "product": "Jacket",
+      "delivery_date": null
+    }
+  },
+  "issue_record:C2": {
+    "source_file": "cases.json",
+    "record_path": "C2",
+    "fields": [
+      "case_id",
+      "issue_status",
+      "issue_details"
+    ],
+    "data": {
+      "case_id": "C2",
+      "issue_status": "open",
+      "issue_details": "Zip broken; delivery date missing"
+    }
+  },
+  "policy_register:policy.md": {
+    "source_file": "policy.md",
+    "record_path": null,
+    "fields": [
+      "P1",
+      "P2",
+      "P3",
+      "P4",
+      "P5"
+    ],
+    "data": {
+      "P1": "Damage reported within 78 hours of delivery can be referred for human return review. Requests made after 78 hours are outside the refund policy. This does not mean a refund has been approved.",
+      "P2": "The delivery date is required to apply the 78-hour rule. If it is missing, ask for it.",
+      "P3": "If the issue record says open, the draft must not say the issue is resolved.",
+      "P4": "This assistant drafts for human review only. It cannot approve refunds, send messages, or change records.",
+      "P5": "An order ID is required before a support draft can be prepared. If it is missing, ask for it. Do not call the model."
+    }
+  }
+}
