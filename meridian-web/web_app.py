@@ -222,10 +222,20 @@ def execute_case_review(case_id: str) -> tuple[str, dict[str, str], dict[str, An
     return task, sources, result
 
 
-def context_overview() -> tuple[str, list[str]]:
+def context_overview() -> tuple[str, dict[str, str]]:
     task_path, context_directory = configured_paths()
     task, sources = review_app.load_context_pack(task_path, context_directory)
-    return task, sorted(sources)
+    return task, sources
+
+
+def source_preview_context(task: str, sources: dict[str, str]) -> dict[str, Any]:
+    task_path, _ = configured_paths()
+    return {
+        "task": task,
+        "source_names": sorted(sources),
+        "source_contents": {task_path.name: task, **sources},
+        "preview_file_name": task_path.name,
+    }
 
 
 def requested_case_id() -> str:
@@ -246,6 +256,8 @@ def page_context(**overrides: Any) -> dict[str, Any]:
         "selected_case_id": "C2",
         "task": "",
         "source_names": [],
+        "source_contents": {},
+        "preview_file_name": "task.md",
         "result": None,
         "error": None,
     }
@@ -256,11 +268,10 @@ def page_context(**overrides: Any) -> dict[str, Any]:
 @app.get("/")
 def index():
     try:
-        task, source_names = context_overview()
+        task, sources = context_overview()
         selected_case_id = requested_case_id()
         return render_template("index.html", **page_context(
-            task=task,
-            source_names=source_names,
+            **source_preview_context(task, sources),
             selected_case_id=selected_case_id,
         ))
     except Exception as exc:
@@ -276,20 +287,19 @@ def run_review():
         selected_case_id = requested_case_id()
         task, sources, result = execute_case_review(selected_case_id)
         return render_template("index.html", **page_context(
-            task=task,
-            source_names=sorted(sources),
+            **source_preview_context(task, sources),
             result=result,
             selected_case_id=selected_case_id,
         ))
     except Exception as exc:
         app.logger.exception("Context-pack review failed")
         try:
-            task, source_names = context_overview()
+            task, sources = context_overview()
+            source_context = source_preview_context(task, sources)
         except Exception:
-            task, source_names = "", []
+            source_context = source_preview_context("", {})
         return render_template("index.html", **page_context(
-            task=task,
-            source_names=source_names,
+            **source_context,
             selected_case_id=request.form.get("case_id") or "C2",
             error=f"The review could not be completed: {exc}",
         )), 502

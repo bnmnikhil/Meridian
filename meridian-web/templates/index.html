@@ -21,10 +21,10 @@
     <aside class="sidebar">
       <section class="panel">
         <div class="panel-heading">
-          <h2>Task</h2>
-          <span class="count">task.md</span>
+          <h2>File preview</h2>
+          <span id="preview-file-name" class="count">{{ preview_file_name }}</span>
         </div>
-        <pre class="task-copy">{{ task }}</pre>
+        <pre id="source-preview" class="task-copy">{{ task }}</pre>
       </section>
 
       <section class="panel">
@@ -34,7 +34,12 @@
         </div>
         <ul class="source-list">
           {% for source in source_names %}
-            <li><span class="file-mark"></span>{{ source }}</li>
+            <li>
+              <button class="source-button" type="button" data-source-name="{{ source }}" aria-pressed="false">
+                <span class="file-mark" aria-hidden="true"></span>
+                <span>{{ source }}</span>
+              </button>
+            </li>
           {% else %}
             <li>No context files found.</li>
           {% endfor %}
@@ -53,7 +58,7 @@
       <section class="run-card">
         <div>
           <p class="eyebrow">Contract-validated output</p>
-          <h2>Prepare the C2 review</h2>
+          <h2>Prepare a case review</h2>
           <p>The server checks source IDs, known facts, missing information, policy references, and review status.</p>
         </div>
         <form id="review-form" action="{{ url_for('run_review') }}" method="post">
@@ -173,5 +178,6 @@
       {% endif %}
     </section>
   </main>
+  <script id="context-source-content" type="application/json">{{ source_contents|tojson }}</script>
 </body>
 </html>

@@ -47,7 +47,12 @@ h2 { margin-bottom: .65rem; font-size: 1.05rem; }
 .count { border-radius: 999px; background: #eeeee8; color: var(--muted); padding: .25rem .55rem; font-size: .72rem; font-weight: 700; }
 .task-copy { max-height: 21rem; margin: .5rem 0 0; overflow: auto; color: #35413b; font: .78rem/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
 .source-list, .evidence-list { margin: .4rem 0 0; padding: 0; list-style: none; }
-.source-list li { display: flex; align-items: center; gap: .65rem; padding: .52rem 0; border-top: 1px solid #ebeae4; color: #4e5953; font-size: .82rem; }
+.source-list li { border-top: 1px solid #ebeae4; }
+.source-button { display: flex; width: 100%; min-width: 0; align-items: center; gap: .65rem; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #4e5953; padding: .52rem 0; font-size: .82rem; font-weight: 500; text-align: left; }
+.source-button:hover { background: #f0f4ef; color: var(--green); }
+.source-button[aria-pressed="true"] { background: var(--green-soft); color: var(--green); font-weight: 700; }
+.source-button:focus-visible { outline: 3px solid rgba(31, 104, 77, .25); outline-offset: 2px; }
+.source-button span:last-child { overflow-wrap: anywhere; }
 .file-mark { width: .55rem; height: .7rem; border: 1px solid #779283; border-radius: .1rem; background: #eef5f0; }
 
 .run-card { display: flex; align-items: center; justify-content: space-between; gap: 2rem; padding: 1.6rem 1.8rem; background: linear-gradient(135deg, #fffefa, #eef6f1); }
