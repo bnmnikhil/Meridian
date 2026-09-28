@@ -631,7 +631,7 @@ def missing_delivery_date_result() -> dict[str, Any]:
     return {
         "draft_reply": (
             "Before Meridian Retail can assess whether this case falls within the "
-            "78-hour damage-reporting rule, please provide the delivery date. "
+            "2 day  damage-reporting rule, please provide the delivery date. "
             "A human support agent will review the request once that information is available."
         ),
         "evidence_refs": ["P2", "P4"],
@@ -656,7 +656,7 @@ def parse_delivery_timestamp(value: str) -> datetime:
 def out_of_policy_result() -> dict[str, Any]:
     return {
         "draft_reply": (
-            "This request is outside Meridian Retail's 78-hour refund window, "
+            "This request is outside Meridian Retail's 2 day refund window, "
             "so the refund request cannot be accepted."
         ),
         "evidence_refs": ["P1", "P4"],

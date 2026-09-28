@@ -143,7 +143,7 @@ def local_gate_result(
             "evidence_refs": ["P2", "P4"],
             "evidence_links": [
                 {"claim": "The delivery date is missing.", "source_id": order_source},
-                {"claim": "The delivery date is required to apply the 78-hour rule.", "source_id": policy_source},
+                {"claim": "The delivery date is required to apply the 2 day rule.", "source_id": policy_source},
             ],
             "missing_information": ["delivery_date"],
             "conflicting_information": [],
@@ -158,13 +158,13 @@ def local_gate_result(
         issue_source = f"issue_record:{case_id}"
         return {
             "case_id": case_id,
-            "case_summary": f"{summary} The supplied delivery date is outside the 78-hour window.",
+            "case_summary": f"{summary} The supplied delivery date is outside the 2 day window.",
             "known_facts": facts,
             "evidence_refs": ["P1", "P3", "P4"],
             "evidence_links": [
-                {"claim": "The supplied delivery date is outside the 78-hour window.", "source_id": order_source},
+                {"claim": "The supplied delivery date is outside the 2 day window.", "source_id": order_source},
                 {"claim": "The issue remains open.", "source_id": issue_source},
-                {"claim": "Requests after 78 hours are outside policy.", "source_id": policy_source},
+                {"claim": "Requests after 2 days are outside policy.", "source_id": policy_source},
             ],
             "missing_information": [],
             "conflicting_information": [],
