@@ -12,6 +12,10 @@ from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_MODEL = "openrouter/free"
+# The policy is two days. Case records contain only a delivery date, so the
+# implementation uses a 78-hour date-only allowance to avoid rejecting a case
+# solely because the actual delivery time is unavailable. A human still
+# confirms the timestamp before any dependent action.
 REFUND_WINDOW = timedelta(hours=78)
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
 TASK_MAX_OUTPUT_TOKENS = 8192
@@ -29,6 +33,12 @@ ALLOWED_REVIEW_STATUSES = {
     "NEEDS_INFORMATION",
     "BLOCKED",
 }
+
+
+class ReviewUnavailableError(RuntimeError):
+    """Raised when no contract-valid review result can be produced safely."""
+
+
 REQUIRED_FIELDS = {
     "draft_reply": str,
     "evidence_refs": list,
@@ -325,6 +335,136 @@ CONTEXT PACK
     return system_prompt, user_prompt
 
 
+def policy_rules(policy: str) -> dict[str, str]:
+    """Return the supplied policy text indexed by its stable policy IDs."""
+    rules: dict[str, str] = {}
+    for line in policy.splitlines():
+        match = re.match(r"^(P\d+)\.\s*(.+)$", line.strip())
+        if match:
+            rules[match.group(1)] = match.group(2)
+    return rules
+
+
+def build_case_evidence_map(
+    case: dict[str, Any],
+    policy: str,
+) -> dict[str, dict[str, Any]]:
+    """Build the traceable source map for one selected case."""
+    case_id = case["case_id"]
+    order_label = case.get("order_id") or case_id
+    return {
+        f"support_queue:{case_id}": {
+            "source_file": "cases.json",
+            "record_path": case_id,
+            "fields": ["case_id", "product", "customer_question"],
+            "data": {
+                "case_id": case_id,
+                "product": case.get("product"),
+                "customer_question": case.get("customer_question"),
+            },
+        },
+        f"order_record:{order_label}": {
+            "source_file": "cases.json",
+            "record_path": case_id,
+            "fields": ["case_id", "order_id", "product", "delivery_date"],
+            "data": {
+                "case_id": case_id,
+                "order_id": case.get("order_id"),
+                "product": case.get("product"),
+                "delivery_date": case.get("delivery_date"),
+            },
+        },
+        f"issue_record:{case_id}": {
+            "source_file": "cases.json",
+            "record_path": case_id,
+            "fields": ["case_id", "issue_status", "issue_details"],
+            "data": {
+                "case_id": case_id,
+                "issue_status": case.get("issue_status"),
+                "issue_details": case.get("issue_details"),
+            },
+        },
+        "policy_register:policy.md": {
+            "source_file": "policy.md",
+            "record_path": None,
+            "fields": list(policy_rules(policy)),
+            "data": policy_rules(policy),
+        },
+    }
+
+
+def case_known_facts(
+    case: dict[str, Any],
+    evidence_map: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Pair every supplied, non-missing case fact with its source ID."""
+    case_id = case["case_id"]
+    order_label = case.get("order_id") or case_id
+    source_fields = [
+        (f"support_queue:{case_id}", ("case_id", "product", "customer_question")),
+        (f"order_record:{order_label}", ("order_id", "delivery_date")),
+        (f"issue_record:{case_id}", ("issue_status", "issue_details")),
+    ]
+    facts: list[dict[str, Any]] = []
+    for source_id, fields in source_fields:
+        data = evidence_map[source_id]["data"]
+        for field in fields:
+            if data.get(field) is not None:
+                facts.append({"field": field, "value": data[field], "source_id": source_id})
+    return facts
+
+
+def build_case_task(
+    case: dict[str, Any],
+    evidence_map: dict[str, dict[str, Any]],
+) -> str:
+    """Create a case-scoped task that requests the complete output contract."""
+    evidence = ", ".join(f"`{source_id}`" for source_id in evidence_map)
+    return f"""# Task
+
+Prepare a structured case review and draft for a human reviewer for case {case['case_id']}.
+
+## Evidence
+
+{evidence} only.
+
+## Boundaries
+
+No return approval, refund, customer message, record change or invented fact.
+
+## Output contract
+
+Use the supplied output contract definitions and preserve evidence source IDs.
+
+## Human-review requirement
+
+A person reviews the proposed draft and confirms any delivery-time boundary before a dependent action continues.
+"""
+
+
+def prepare_case_context(
+    case: dict[str, Any],
+    policy: str,
+    sources: dict[str, str] | None = None,
+) -> tuple[str, dict[str, str], dict[str, dict[str, Any]]]:
+    """Prepare an isolated context pack for one case without mutating the caller."""
+    if sources is None:
+        _, loaded_sources = load_context_pack(PROJECT_ROOT / "task.md")
+        prepared_sources = dict(loaded_sources)
+    else:
+        prepared_sources = dict(sources)
+
+    prepared_sources.setdefault(
+        "cases.json",
+        json.dumps({case["case_id"]: case}, indent=2),
+    )
+    prepared_sources["policy.md"] = policy
+    evidence_map = build_case_evidence_map(case, policy)
+    prepared_sources["evidence_map.json"] = json.dumps(evidence_map, indent=2)
+    task = build_case_task(case, evidence_map)
+    return task, prepared_sources, evidence_map
+
+
 def strip_code_fence(text: str) -> str:
     """Remove one surrounding Markdown code fence while preserving plain JSON."""
     cleaned = text.strip()
@@ -612,32 +752,16 @@ def load_offline_demo(case_id: str) -> dict[str, Any]:
     outputs = json.loads(outputs_path.read_text(encoding="utf-8"))
     if case_id not in outputs:
         raise KeyError(f"No offline demo output exists for {case_id}.")
-    return validate_result(outputs[case_id])
-
-
-def missing_order_id_result() -> dict[str, Any]:
-    return {
-        "draft_reply": (
-            "Before Meridian Retail can review this request, please provide the order ID. "
-            "A human support agent will continue the review once that information is available."
-        ),
-        "evidence_refs": ["P5", "P4"],
-        "missing_information": ["order_id"],
-        "review_status": "NEEDS_INFORMATION",
-    }
-
-
-def missing_delivery_date_result() -> dict[str, Any]:
-    return {
-        "draft_reply": (
-            "Before Meridian Retail can assess whether this case falls within the "
-            "2 day  damage-reporting rule, please provide the delivery date. "
-            "A human support agent will review the request once that information is available."
-        ),
-        "evidence_refs": ["P2", "P4"],
-        "missing_information": ["delivery_date"],
-        "review_status": "NEEDS_INFORMATION",
-    }
+    case, policy = load_inputs(case_id)
+    evidence_map = build_case_evidence_map(case, policy)
+    result = outputs[case_id]
+    return validate_task_result(
+        result,
+        set(evidence_map),
+        evidence_map,
+        set(result.get("missing_information", [])),
+        case_id,
+    )
 
 
 def parse_delivery_timestamp(value: str) -> datetime:
@@ -653,32 +777,66 @@ def parse_delivery_timestamp(value: str) -> datetime:
     return delivery_timestamp.astimezone(timezone.utc)
 
 
-def out_of_policy_result() -> dict[str, Any]:
-    return {
-        "draft_reply": (
-            "This request is outside Meridian Retail's 2 day refund window, "
-            "so the refund request cannot be accepted."
-        ),
-        "evidence_refs": ["P1", "P4"],
-        "missing_information": [],
-        "review_status": "BLOCKED",
-    }
-
-
-def review_case(
+def local_case_task_result(
     case: dict[str, Any],
-    policy: str,
-    simulate_timeout: bool = False,
-    model_call: Callable[[dict[str, Any], str], dict[str, Any]] = get_live_result,
+    evidence_map: dict[str, dict[str, Any]],
     current_timestamp: datetime | None = None,
-) -> dict[str, Any]:
-    # Apply local safety checks before making any external model call.
-    if simulate_timeout:
-        return unavailable_result()
+) -> dict[str, Any] | None:
+    """Return a rich local-gate result, or None when model review may proceed."""
+    case_id = case["case_id"]
+    order_label = case.get("order_id") or case_id
+    order_source = f"order_record:{order_label}"
+    policy_source = "policy_register:policy.md"
+    facts = case_known_facts(case, evidence_map)
+    summary = f"{case.get('product') or 'Product'} support request for case {case_id}."
+
     if not case.get("order_id"):
-        return missing_order_id_result()
+        return {
+            "case_id": case_id,
+            "case_summary": f"{summary} The order ID is missing.",
+            "known_facts": facts,
+            "evidence_refs": ["P5", "P4"],
+            "evidence_links": [
+                {"claim": "The order ID is missing.", "source_id": order_source},
+                {
+                    "claim": "An order ID is required before drafting.",
+                    "source_id": policy_source,
+                },
+            ],
+            "missing_information": ["order_id"],
+            "conflicting_information": [],
+            "draft_reply": (
+                "Before Meridian Retail can review this request, please provide the order ID. "
+                "A human support agent will continue the review once that information is available."
+            ),
+            "review_status": "NEEDS_INFORMATION",
+            "human_action_required": "Confirm the order ID before the review continues.",
+        }
+
     if not case.get("delivery_date"):
-        return missing_delivery_date_result()
+        return {
+            "case_id": case_id,
+            "case_summary": f"{summary} The delivery date is missing.",
+            "known_facts": facts,
+            "evidence_refs": ["P2", "P4"],
+            "evidence_links": [
+                {"claim": "The delivery date is missing.", "source_id": order_source},
+                {
+                    "claim": "The delivery date is required to apply the two-day rule.",
+                    "source_id": policy_source,
+                },
+            ],
+            "missing_information": ["delivery_date"],
+            "conflicting_information": [],
+            "draft_reply": (
+                "Before Meridian Retail can assess whether this case falls within the "
+                "two-day damage-reporting rule, please provide the delivery date. "
+                "A human support agent will review the request once that information is available."
+            ),
+            "review_status": "NEEDS_INFORMATION",
+            "human_action_required": "Confirm the delivery date before the review continues.",
+        }
+
     delivery_timestamp = parse_delivery_timestamp(case["delivery_date"])
     now = current_timestamp or datetime.now(timezone.utc)
     if now.tzinfo is None:
@@ -686,12 +844,93 @@ def review_case(
     else:
         now = now.astimezone(timezone.utc)
     if delivery_timestamp < now - REFUND_WINDOW:
-        return out_of_policy_result()
-    try:
-        return model_call(case, policy)
-    except Exception:
-        # Provider, configuration, and validation errors share the safe fallback.
-        return unavailable_result()
+        return {
+            "case_id": case_id,
+            "case_summary": (
+                f"{summary} The supplied date is outside the operational 78-hour "
+                "date-only allowance for the two-day policy."
+            ),
+            "known_facts": facts,
+            "evidence_refs": ["P1", "P4"],
+            "evidence_links": [
+                {
+                    "claim": "The supplied delivery date is outside the date-only allowance.",
+                    "source_id": order_source,
+                },
+                {
+                    "claim": "The policy permits damaged-item referral within two days.",
+                    "source_id": policy_source,
+                },
+            ],
+            "missing_information": [],
+            "conflicting_information": [],
+            "draft_reply": (
+                "Based on the supplied delivery date, this request is outside Meridian "
+                "Retail's operational date-only allowance for the two-day policy. "
+                "A human reviewer must confirm the delivery timestamp before any decision."
+            ),
+            "review_status": "BLOCKED",
+            "human_action_required": (
+                "Confirm the actual delivery timestamp and the two-day policy cutoff."
+            ),
+        }
+    return None
+
+
+def get_case_task_result(
+    case: dict[str, Any],
+    policy: str,
+    sources: dict[str, str] | None = None,
+    *,
+    simulate_timeout: bool = False,
+    task_runner: Callable[[str, dict[str, str]], dict[str, Any]] | None = None,
+    current_timestamp: datetime | None = None,
+) -> dict[str, Any]:
+    """Return the complete task contract for a selected case."""
+    if simulate_timeout:
+        raise ReviewUnavailableError(
+            "A new draft is unavailable. Use the manual review process and retry later."
+        )
+
+    task, prepared_sources, evidence_map = prepare_case_context(case, policy, sources)
+    local_result = local_case_task_result(case, evidence_map, current_timestamp)
+    if local_result is not None:
+        return validate_task_result(
+            local_result,
+            set(evidence_map),
+            evidence_map,
+            set(local_result["missing_information"]),
+            case["case_id"],
+        )
+
+    runner = task_runner or get_task_result
+    result = runner(task, prepared_sources)
+    return validate_task_result(
+        result,
+        set(evidence_map),
+        evidence_map,
+        set(),
+        case["case_id"],
+    )
+
+
+def review_case(
+    case: dict[str, Any],
+    policy: str,
+    simulate_timeout: bool = False,
+    model_call: Callable[[str, dict[str, str]], dict[str, Any]] | None = None,
+    current_timestamp: datetime | None = None,
+    sources: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Backward-compatible entry point for the core rich case workflow."""
+    return get_case_task_result(
+        case,
+        policy,
+        sources,
+        simulate_timeout=simulate_timeout,
+        task_runner=model_call,
+        current_timestamp=current_timestamp,
+    )
 
 
 def print_section(title: str, value: Any) -> None:
@@ -703,8 +942,8 @@ def print_section(title: str, value: Any) -> None:
 
 
 def main() -> int:
-    # With --case, retain the original case workflow. Without --case, execute
-    # task.md against the information files in its folder.
+    # Both entry paths return the complete task contract. With --case, the core
+    # prepares a case-scoped task; otherwise it executes the supplied task.md.
     parser = argparse.ArgumentParser(description="Meridian Retail support-draft review tool")
     parser.add_argument("--case", dest="case_id", help="Case ID: C1, C2, C3, or C4")
     parser.add_argument(
@@ -750,27 +989,26 @@ def main() -> int:
         print(f"Input error: {exc}", file=sys.stderr)
         return 2
 
-    if args.offline_demo:
-        result = load_offline_demo(args.case_id)
-    else:
-        result = review_case(case, policy, simulate_timeout=args.simulate_timeout)
+    try:
+        if args.offline_demo:
+            result = load_offline_demo(args.case_id)
+        else:
+            result = review_case(case, policy, simulate_timeout=args.simulate_timeout)
+    except ReviewUnavailableError as exc:
+        print(f"Review unavailable: {exc}", file=sys.stderr)
+        return 2
+    except (OSError, UnicodeError, ValueError, RuntimeError) as exc:
+        print(f"Review error: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        print(f"Model error: {exc}", file=sys.stderr)
+        return 2
     print_section("SUPPLIED FACTS", case)
     print_section("SUPPLIED POLICY", policy)
     if args.offline_demo:
         print("\nOFFLINE DEMO MODE: prerecorded synthetic output; no model API was called.")
-    if args.simulate_timeout:
-        print(
-            "\nSIMULATED TIMEOUT — no model API was called; use the manual review process.",
-            file=sys.stderr,
-        )
-    elif result.get("review_status") == "UNAVAILABLE":
-        print(
-            "\nLIVE API UNAVAILABLE — check the OpenRouter credit balance, application "
-            "API key, model access, and internet connection.",
-            file=sys.stderr,
-        )
     print_section("DRAFT RESULT FOR HUMAN REVIEW", result)
-    return 0 if result.get("review_status") != "UNAVAILABLE" else 2
+    return 0
 
 
 if __name__ == "__main__":

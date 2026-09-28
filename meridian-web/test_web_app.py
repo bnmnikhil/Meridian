@@ -76,16 +76,29 @@ def test_api_run_returns_result(monkeypatch):
     assert response.get_json()["case_id"] == "C2"
 
 
-def test_missing_order_case_is_resolved_without_a_model_call(monkeypatch):
-    def model_must_not_run(task, sources):
-        raise AssertionError("Model was called for a case with no order ID")
+def test_selected_case_is_delegated_to_the_core(monkeypatch):
+    captured = {}
 
-    monkeypatch.setattr(web_app.review_app, "get_task_result", model_must_not_run)
+    def fake_case_task_result(case, policy, sources):
+        captured["case"] = case
+        captured["policy"] = policy
+        captured["sources"] = sources
+        return VALID_WEB_RESULT
 
-    _, _, result = web_app.execute_case_review("C4")
+    monkeypatch.setattr(
+        web_app.review_app,
+        "get_case_task_result",
+        fake_case_task_result,
+    )
 
-    assert result["review_status"] == "NEEDS_INFORMATION"
-    assert result["missing_information"] == ["order_id"]
+    task, sources, result = web_app.execute_case_review("C4")
+
+    assert captured["case"]["case_id"] == "C4"
+    assert "P5" in captured["policy"]
+    assert "cases.json" in captured["sources"]
+    assert "case C4" in task
+    assert "evidence_map.json" in sources
+    assert result is VALID_WEB_RESULT
 
 
 def test_unknown_case_is_rejected():

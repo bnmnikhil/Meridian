@@ -2,6 +2,10 @@
 
 This folder contains only the web layer. It uses the assignment in the sibling
 `fde-class2-takehome-starter` folder as its core task runner and context pack.
+The core owns case evidence construction, the date and missing-information
+gates, model calls, output-contract validation, and rich result construction.
+The Flask application only handles HTTP input, calls the core case-task entry
+point, and renders or serializes the returned result.
 
 ## Local setup
 

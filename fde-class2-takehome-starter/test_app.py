@@ -1,4 +1,5 @@
 import json
+import sys
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -19,10 +20,6 @@ VALID_RESULT = {
 VALID_JSON = json.dumps(VALID_RESULT)
 
 
-def good_model_call(case, policy):
-    return dict(VALID_RESULT)
-
-
 VALID_TASK_RESULT = {
     "case_id": "C1",
     "case_summary": "A supplied case summary.",
@@ -35,6 +32,29 @@ VALID_TASK_RESULT = {
     "review_status": "READY_FOR_HUMAN_REVIEW",
     "human_action_required": "Review the proposed reply.",
 }
+
+VALID_CASE_RESULT = {
+    "case_id": "C1",
+    "case_summary": "A jacket was reported with a broken zip.",
+    "known_facts": [
+        {"field": "order_id", "value": "MR-1042", "source_id": "order_record:MR-1042"}
+    ],
+    "evidence_refs": ["P1", "P4"],
+    "evidence_links": [
+        {"claim": "The order ID is MR-1042.", "source_id": "order_record:MR-1042"}
+    ],
+    "missing_information": [],
+    "conflicting_information": [],
+    "draft_reply": "Proposed wording for human review.",
+    "review_status": "READY_FOR_HUMAN_REVIEW",
+    "human_action_required": "Review the proposed reply.",
+}
+
+
+def good_model_call(task, sources):
+    assert "case C1" in task
+    assert "evidence_map.json" in sources
+    return json.loads(json.dumps(VALID_CASE_RESULT))
 
 
 def test_all_cases_and_policy_load():
@@ -178,12 +198,14 @@ def test_c1_uses_model_result():
         current_timestamp=datetime(2026, 9, 15, 5, 59, tzinfo=timezone.utc),
     )
     assert result["review_status"] == "READY_FOR_HUMAN_REVIEW"
+    assert set(result) == set(app.TASK_REQUIRED_FIELDS)
+    assert result["case_id"] == "C1"
 
 
 def test_delivery_older_than_78_hours_is_blocked_before_model_call():
     case, policy = app.load_inputs("C1")
 
-    def model_must_not_run(case, policy):
+    def model_must_not_run(task, sources):
         raise AssertionError("The model was called for an out-of-policy delivery")
 
     result = app.review_case(
@@ -196,7 +218,8 @@ def test_delivery_older_than_78_hours_is_blocked_before_model_call():
     assert result["review_status"] == "BLOCKED"
     assert result["missing_information"] == []
     assert result["evidence_refs"] == ["P1", "P4"]
-    assert "outside Meridian Retail's 78-hour refund window" in result["draft_reply"]
+    assert "date-only allowance" in result["draft_reply"]
+    assert result["human_action_required"]
 
 
 def test_delivery_at_exactly_78_hours_is_still_eligible_for_review():
@@ -213,49 +236,66 @@ def test_delivery_at_exactly_78_hours_is_still_eligible_for_review():
 def test_c2_stops_before_model_call():
     case, policy = app.load_inputs("C2")
 
-    def model_must_not_run(case, policy):
+    def model_must_not_run(task, sources):
         raise AssertionError("The model was called even though delivery_date is missing")
 
     result = app.review_case(case, policy, model_call=model_must_not_run)
     assert result["review_status"] == "NEEDS_INFORMATION"
     assert result["missing_information"] == ["delivery_date"]
     assert result["evidence_refs"] == ["P2", "P4"]
+    assert set(result) == set(app.TASK_REQUIRED_FIELDS)
 
 
 def test_c4_stops_before_model_call():
     case, policy = app.load_inputs("C4")
 
-    def model_must_not_run(case, policy):
+    def model_must_not_run(task, sources):
         raise AssertionError("The model was called even though order_id is missing")
 
     result = app.review_case(case, policy, model_call=model_must_not_run)
     assert result["review_status"] == "NEEDS_INFORMATION"
     assert result["missing_information"] == ["order_id"]
     assert result["evidence_refs"] == ["P5", "P4"]
+    assert set(result) == set(app.TASK_REQUIRED_FIELDS)
+
+
+def test_case_context_is_prepared_in_core_without_mutating_sources():
+    case, policy = app.load_inputs("C2")
+    sources = {"cases.json": "{}", "policy.md": "old policy"}
+
+    task, prepared_sources, evidence_map = app.prepare_case_context(case, policy, sources)
+
+    assert sources == {"cases.json": "{}", "policy.md": "old policy"}
+    assert "case C2" in task
+    assert prepared_sources["policy.md"] == policy
+    assert json.loads(prepared_sources["evidence_map.json"]) == evidence_map
+    assert set(evidence_map) == {
+        "support_queue:C2",
+        "order_record:MR-1088",
+        "issue_record:C2",
+        "policy_register:policy.md",
+    }
 
 
 def test_timeout_is_visible_and_safe():
     case, policy = app.load_inputs("C1")
-    result = app.review_case(case, policy, simulate_timeout=True)
-    assert result["review_status"] == "UNAVAILABLE"
-    assert result["draft_reply"] == ""
-    assert "manual review" in result["error"]
+    with pytest.raises(app.ReviewUnavailableError, match="manual review"):
+        app.review_case(case, policy, simulate_timeout=True)
 
 
 def test_provider_failure_is_visible_and_safe():
     case, policy = app.load_inputs("C1")
 
-    def failed_model_call(case, policy):
+    def failed_model_call(task, sources):
         raise RuntimeError("provider unavailable")
 
-    result = app.review_case(
-        case,
-        policy,
-        model_call=failed_model_call,
-        current_timestamp=datetime(2026, 9, 15, 5, 59, tzinfo=timezone.utc),
-    )
-    assert result["review_status"] == "UNAVAILABLE"
-    assert result["draft_reply"] == ""
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        app.review_case(
+            case,
+            policy,
+            model_call=failed_model_call,
+            current_timestamp=datetime(2026, 9, 15, 5, 59, tzinfo=timezone.utc),
+        )
 
 
 def test_each_failure_returns_a_new_result_object():
@@ -352,6 +392,11 @@ def test_task_query_uses_the_larger_output_limit(monkeypatch):
     monkeypatch.setattr(app, "query_model", fake_query_model)
     monkeypatch.setattr(app, "load_dotenv", lambda *args, **kwargs: None)
     monkeypatch.setenv("APP_OPENROUTER_API_KEY", "test-openrouter-key")
+    monkeypatch.setitem(
+        sys.modules,
+        "openai",
+        SimpleNamespace(OpenAI=lambda **kwargs: SimpleNamespace()),
+    )
 
     task = """# Task
 
@@ -382,8 +427,6 @@ def test_task_query_uses_the_larger_output_limit(monkeypatch):
 
 
 def test_live_result_uses_openrouter_client_and_settings(monkeypatch):
-    import openai
-
     captured = {}
     request = {}
     choice = SimpleNamespace(message=SimpleNamespace(content=VALID_JSON), finish_reason="stop")
@@ -398,7 +441,7 @@ def test_live_result_uses_openrouter_client_and_settings(monkeypatch):
             create=fake_create
         )))
 
-    monkeypatch.setattr(openai, "OpenAI", fake_client)
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=fake_client))
     monkeypatch.setattr(app, "load_dotenv", lambda *args, **kwargs: None)
     monkeypatch.setenv("APP_OPENROUTER_API_KEY", "test-openrouter-key")
     monkeypatch.delenv("APP_OPENROUTER_MODEL", raising=False)

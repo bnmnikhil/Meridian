@@ -34,8 +34,9 @@ Meridian/
   `contractDefinations.md`.
 - Uses `evidence_map.json` to keep conclusions traceable to supplied evidence.
 - Supports synthetic cases C1-C4 in the CLI and browser UI.
-- Rejects a refund as out of policy when its delivery timestamp is more than
-  78 hours before the current UTC timestamp.
+- Applies a 78-hour date-only allowance for the policy's two-day rule because
+  the supplied delivery records do not contain a delivery time; a human must
+  confirm the actual timestamp before acting.
 - Stops safely when required facts are missing or the model provider is
   unavailable.
 
@@ -128,4 +129,3 @@ apply request rate limits.
 - Case data in this repository is synthetic.
 - Model failures return a safe manual-review response instead of taking an
   external action.
-

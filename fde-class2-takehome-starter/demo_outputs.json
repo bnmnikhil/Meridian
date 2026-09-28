@@ -1,20 +1,72 @@
 {
   "C1": {
-    "draft_reply": "The damaged jacket can be referred for human return review because the damage was reported within two days of delivery. This is not a refund approval, and the issue remains open for review.",
+    "case_id": "C1",
+    "case_summary": "A jacket was reported with a broken zip after delivery.",
+    "known_facts": [
+      {"field": "case_id", "value": "C1", "source_id": "support_queue:C1"},
+      {"field": "product", "value": "Jacket", "source_id": "support_queue:C1"},
+      {"field": "customer_question", "value": "The jacket arrived yesterday and the zip is broken. Can I return it?", "source_id": "support_queue:C1"},
+      {"field": "order_id", "value": "MR-1042", "source_id": "order_record:MR-1042"},
+      {"field": "delivery_date", "value": "2026-09-12", "source_id": "order_record:MR-1042"},
+      {"field": "issue_status", "value": "open", "source_id": "issue_record:C1"},
+      {"field": "issue_details", "value": "Zip broken on arrival", "source_id": "issue_record:C1"}
+    ],
     "evidence_refs": ["P1", "P3", "P4"],
+    "evidence_links": [
+      {"claim": "The customer reported a broken zip.", "source_id": "support_queue:C1"},
+      {"claim": "The issue remains open.", "source_id": "issue_record:C1"},
+      {"claim": "Damaged-item replies remain subject to human review.", "source_id": "policy_register:policy.md"}
+    ],
     "missing_information": [],
-    "review_status": "READY_FOR_HUMAN_REVIEW"
+    "conflicting_information": [],
+    "draft_reply": "The damaged jacket can be referred for human return review under the supplied policy. This is not a refund approval, and the issue remains open for review.",
+    "review_status": "READY_FOR_HUMAN_REVIEW",
+    "human_action_required": "Confirm the delivery timestamp and review the proposed reply."
   },
   "C2": {
-    "draft_reply": "Please provide the delivery date before Meridian Retail assesses whether the two-day reporting rule applies. A human support agent will review the request.",
+    "case_id": "C2",
+    "case_summary": "A jacket has a broken zip, but its delivery date is missing.",
+    "known_facts": [
+      {"field": "case_id", "value": "C2", "source_id": "support_queue:C2"},
+      {"field": "product", "value": "Jacket", "source_id": "support_queue:C2"},
+      {"field": "customer_question", "value": "The jacket has a broken zip. Can I return it?", "source_id": "support_queue:C2"},
+      {"field": "order_id", "value": "MR-1088", "source_id": "order_record:MR-1088"},
+      {"field": "issue_status", "value": "open", "source_id": "issue_record:C2"},
+      {"field": "issue_details", "value": "Zip broken; delivery date missing", "source_id": "issue_record:C2"}
+    ],
     "evidence_refs": ["P2", "P4"],
+    "evidence_links": [
+      {"claim": "The delivery date is missing.", "source_id": "order_record:MR-1088"},
+      {"claim": "The delivery date is required to apply the two-day rule.", "source_id": "policy_register:policy.md"}
+    ],
     "missing_information": ["delivery_date"],
-    "review_status": "NEEDS_INFORMATION"
+    "conflicting_information": [],
+    "draft_reply": "Please provide the delivery date before Meridian Retail assesses whether the two-day reporting rule applies. A human support agent will review the request.",
+    "review_status": "NEEDS_INFORMATION",
+    "human_action_required": "Confirm the delivery date before the review continues."
   },
   "C3": {
-    "draft_reply": "The issue record is still open, so I cannot confirm that the issue is resolved. A human support agent will review the request.",
+    "case_id": "C3",
+    "case_summary": "A customer asked for resolution confirmation while the replacement request remains open.",
+    "known_facts": [
+      {"field": "case_id", "value": "C3", "source_id": "support_queue:C3"},
+      {"field": "product", "value": "Shoes", "source_id": "support_queue:C3"},
+      {"field": "customer_question", "value": "Please confirm that my issue is resolved.", "source_id": "support_queue:C3"},
+      {"field": "order_id", "value": "MR-1126", "source_id": "order_record:MR-1126"},
+      {"field": "delivery_date", "value": "2026-09-10", "source_id": "order_record:MR-1126"},
+      {"field": "issue_status", "value": "open", "source_id": "issue_record:C3"},
+      {"field": "issue_details", "value": "Replacement request is still under review", "source_id": "issue_record:C3"}
+    ],
     "evidence_refs": ["P3", "P4"],
+    "evidence_links": [
+      {"claim": "The customer asked for resolution confirmation.", "source_id": "support_queue:C3"},
+      {"claim": "The replacement request remains open.", "source_id": "issue_record:C3"},
+      {"claim": "An open issue must not be described as resolved.", "source_id": "policy_register:policy.md"}
+    ],
     "missing_information": [],
-    "review_status": "READY_FOR_HUMAN_REVIEW"
+    "conflicting_information": [],
+    "draft_reply": "The issue record is still open, so the draft cannot confirm that the issue is resolved. A human support agent will review the request.",
+    "review_status": "READY_FOR_HUMAN_REVIEW",
+    "human_action_required": "Review the open replacement request and the proposed reply."
   }
 }
